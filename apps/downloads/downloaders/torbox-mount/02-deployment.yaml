@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torbox-mount
+  namespace: downloads
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: torbox-mount
+  template:
+    metadata:
+      labels:
+        app: torbox-mount
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: instance-20260107-0859
+      containers:
+        - name: rclone
+          image: rclone/rclone:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+          env:
+            - name: WEBDAV_USER
+              valueFrom:
+                secretKeyRef:
+                  name: torbox-rclone-secret
+                  key: WEBDAV_USER
+            - name: WEBDAV_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: torbox-rclone-secret
+                  key: WEBDAV_PASS
+            # Definimos dónde se guardará la config temporal
+            - name: RCLONE_CONFIG
+              value: "/tmp/rclone.conf"
+          
+          # ESTA ES LA PARTE IMPORTANTE QUE CAMBIA
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "Generando configuración de Rclone..."
+              # Este comando toma tu contraseña plana y la guarda encriptada
+              rclone config create torbox webdav url=https://webdav.torbox.app/ vendor=other user="$WEBDAV_USER" pass="$WEBDAV_PASS" --non-interactive
+              
+              echo "Montando unidad..."
+              rclone mount torbox: /data/mount \
+                --allow-other \
+                --allow-non-empty \
+                --vfs-cache-mode=full \
+                --dir-cache-time=30s \
+                --uid=0 --gid=0
+          
+          lifecycle:
+            preStop:
+              exec:
+                command: ["fusermount", "-uz", "/data/mount"]
+          
+          volumeMounts:
+            # Quitamos el ConfigMap de aquí, ya no hace falta
+            - name: host-mount
+              mountPath: /data/mount
+              mountPropagation: Bidirectional
+
+      volumes:
+        # Quitamos el volumen del ConfigMap
+        - name: host-mount
+          hostPath:
+            path: /mnt/torbox-mount  # <--- Asegúrate que esta carpeta existe en tu PC
+            type: DirectoryOrCreate

@@ -1,0 +1,17 @@
+# rdt-client-nodeport.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: rdt-client
+  namespace: downloads
+  labels:
+    app: rdt-client
+spec:
+  type: NodePort
+  selector:
+    app: rdt-client
+  ports:
+  - name: http
+    port: 6500
+    targetPort: 6500
+    nodePort: 31000

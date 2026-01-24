@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: smart-cleaner
+  namespace: downloads
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: rclone-cleaner
+            image: rclone/rclone:latest
+            command: ["/bin/sh", "/scripts/smart-clean.sh"]
+            volumeMounts:
+            - mountPath: /data
+              name: data-storage
+            - mountPath: /config/rclone
+              name: rclone-conf
+              readOnly: true
+            - mountPath: /scripts
+              name: script-vol
+          volumes:
+          - name: data-storage
+            persistentVolumeClaim:
+              claimName: data
+          - name: rclone-conf
+            secret:
+              secretName: rclone-config
+          - name: script-vol
+            configMap:
+              name: cleaner-script
+              defaultMode: 0777

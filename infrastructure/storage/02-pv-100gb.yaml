@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-datos-100gb
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+  - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage  # <--- IMPORTANTE: Coincide con la clase de arriba
+  local:
+    path: /mnt/k3s-data            # <--- ¿Seguro que montaste el disco aquí en el Linux del worker?
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - "instance-20260107-0859"  # <--- TU NODO WORKER EXACTO

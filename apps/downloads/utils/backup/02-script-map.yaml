@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cleaner-script
+  namespace: downloads
+data:
+  smart-clean.sh: |
+    #!/bin/sh
+
+    # --- CONFIGURACIÓN ---
+    TRIGGER_PERCENT=80    # <-- DEJA ESTO AL 5% PARA LA PRUEBA, LUEGO SÚBELO
+    STOP_PERCENT=50
+    DATA_DIR="/data/torbox/"
+    REMOTE_NAME="GDrive" 
+    REMOTE_ROOT="backups"      
+    # ---------------------
+
+    # --- TRUCO PARA KUBERNETES ---
+    # Copiamos la config a un sitio escribible (/tmp) para que rclone no falle al actualizar tokens
+    cp /config/rclone/rclone.conf /tmp/rclone.conf
+    CONFIG_FILE="/tmp/rclone.conf"
+    # -----------------------------
+
+    echo "[INFO] Iniciando comprobación de disco..."
+
+    # Asegurarse de que las carpetas existen para que find no de error
+    mkdir -p "$DATA_DIR/movie" "$DATA_DIR/tv"
+
+    # Obtener porcentaje de uso
+    CURRENT_USAGE=$(df -P "$DATA_DIR" | awk 'NR==2 {print $5}' | tr -d '%')
+
+    echo "[INFO] Uso actual: $CURRENT_USAGE% (Umbral: $TRIGGER_PERCENT%)"
+
+    if [ "$CURRENT_USAGE" -lt "$TRIGGER_PERCENT" ]; then
+      echo "[OK] Espacio suficiente. No se hace nada."
+      exit 0
+    fi
+
+    echo "[ALERTA] Espacio crítico. Iniciando liberación de espacio..."
+
+    while [ "$CURRENT_USAGE" -gt "$STOP_PERCENT" ]; do
+      
+      # 1. Encontrar el archivo más antiguo usando STAT (Compatible con Busybox/Alpine)
+      # stat -c "%Y %n" devuelve "timestamp_numérico /ruta/del/archivo"
+      OLDEST_FILE=$(find "$DATA_DIR/movie" "$DATA_DIR/tv" -type f -exec stat -c "%Y %n" {} + | sort -n | head -n 1 | cut -d' ' -f2-)
+
+      if [ -z "$OLDEST_FILE" ]; then
+        echo "[ERROR] No se encontraron archivos para mover. Saliendo."
+        break
+      fi
+
+      echo " -> Procesando archivo más antiguo: $OLDEST_FILE"
+
+      # 2. Calcular la ruta destino
+      REL_PATH=$(echo "$OLDEST_FILE" | sed "s|$DATA_DIR/||")
+      REMOTE_PATH="$REMOTE_NAME:$REMOTE_ROOT/$REL_PATH"
+
+      # 3. Mover a la nube
+      echo "    Moviendo a: $REMOTE_PATH"
+      rclone move "$OLDEST_FILE" "$REMOTE_PATH" --verbose --transfers=1
+      
+      if [ $? -eq 0 ]; then
+         echo "    [EXITO] Archivo movido y borrado localmente."
+      else
+         echo "    [FALLO] Error al subir. Se detiene el proceso por seguridad."
+         exit 1
+      fi
+
+      # 4. Actualizar uso
+      CURRENT_USAGE=$(df -P "$DATA_DIR" | awk 'NR==2 {print $5}' | tr -d '%')
+      echo "    Nuevo uso de disco: $CURRENT_USAGE%"
+    done
+
+    echo "[INFO] Limpiando carpetas vacías..."
+    # Quitamos el aviso de error por si ya no quedan carpetas
+    find "$DATA_DIR/movie" "$DATA_DIR/tv" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+
+    echo "[FIN] Proceso completado."

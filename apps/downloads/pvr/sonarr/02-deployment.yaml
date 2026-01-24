@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sonarr
+  namespace: downloads
+  labels:
+    app: sonarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sonarr
+  template:
+    metadata:
+      labels:
+        app: sonarr
+    spec:
+      containers:
+      - name: sonarr
+        image: lscr.io/linuxserver/sonarr:latest
+        envFrom:
+        - configMapRef:
+            name: common-env
+        ports:
+        - containerPort: 8989
+          name: http-web
+        volumeMounts:
+        - mountPath: /config
+          name: config-vol
+        
+        # 1. Datos locales (Disco 100GB)
+        # Aquí es donde se escriben los symlinks en /data/downloads
+        # y donde se guardan las series en /data/tv
+        - mountPath: /data
+          name: data-storage
+
+        # 2. ¡NUEVO! Datos de la Nube (Zurg)
+        # Obligatorio para leer el destino de los symlinks
+        #- mountPath: /data/remote
+        #  name: zurg-mount
+        #  readOnly: true
+        #  mountPropagation: HostToContainer 
+
+      volumes:
+      - name: config-vol
+        persistentVolumeClaim:
+          claimName: sonarr-config
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: data
+      
+      # 3. Definición del volumen HostPath (Zurg)
+      #- name: zurg-mount
+      #  hostPath:
+      #    path: /mnt/torbox-mount
+      #    type: Directory

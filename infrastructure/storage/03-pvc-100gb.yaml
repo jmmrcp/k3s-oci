@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: torbox-connector
+    app.kubernetes.io/component: media-storage
+spec:
+  accessModes:
+    - ReadWriteOnce           # cambiar a ReadWriteMany si usas NFS y varios consumers
+  resources:
+    requests:
+      storage: 100Gi          # ← ajustar según tu biblioteca real
+  storageClassName: local-storage
+  volumeMode: Filesystem

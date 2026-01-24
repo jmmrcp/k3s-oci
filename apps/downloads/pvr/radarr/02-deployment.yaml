@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radarr
+  namespace: downloads
+  labels:
+    app: radarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radarr
+  template:
+    metadata:
+      labels:
+        app: radarr
+    spec:
+      containers:
+      - name: radarr
+        image: lscr.io/linuxserver/radarr:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+          - configMapRef:
+              name: common-env
+        ports:
+          - containerPort: 7878
+            name: http-web
+        
+        volumeMounts:
+          # 1. Configuración propia
+          - name: config-vol
+            mountPath: /config
+            
+          # 2. Datos compartidos (Tu disco de 100GB)
+          # Aquí están /data/downloads (donde rdt deja el enlace)
+          # y /data/movies (destino final)
+          - name: data-storage
+            mountPath: /data
+
+          # 3. ¡NUEVO! Acceso a la Nube (Zurg)
+          # Necesario para que Radarr pueda "ver" el contenido del enlace simbólico
+          # Debe ser la MISMA ruta interna que usaste en rdt-client (/data/remote)
+          #- name: zurg-mount
+          #  mountPath: /data/remote
+          #  readOnly: true
+          #  mountPropagation: HostToContainer 
+            
+      volumes:
+      # PVC pequeño para configuración
+      - name: config-vol
+        persistentVolumeClaim:
+          claimName: radarr-config
+
+      # PVC grande de 100GB compartido
+      - name: data-storage
+        persistentVolumeClaim:
+          claimName: data
+
+      # 4. Definición del volumen de Zurg (hostPath)
+      # Apunta a la carpeta en tu servidor físico
+      #- name: zurg-mount
+      #  hostPath:
+      #    path: /mnt/torbox-mount
+      #    type: Directory

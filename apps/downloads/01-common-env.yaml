@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-env
+  namespace: downloads
+data:
+  # CAMBIADO DE 1001 A 1000
+  PGID: "1000"
+  PUID: "1000"
+  TZ: Europe/Madrid

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: filebrowser-config
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/component: configuration  # Optional: improves organization and filtering
+
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+  volumeMode: Filesystem  # Explicit declaration (default value, but good for readability)

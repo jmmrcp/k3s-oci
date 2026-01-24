@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+  namespace: downloads
+  labels:
+    app: jellyfin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyfin
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+    spec:
+      # --- CORRECCIÓN AQUÍ ---
+      # El fsGroup debe ir aquí (nivel Pod), no dentro de containers
+      securityContext:
+        fsGroup: 1000
+      # -----------------------
+
+      initContainers:
+      - name: fix-permissions
+        image: busybox:latest
+        command: ["sh", "-c", "chown -R 1000:1000 /config"]
+        volumeMounts:
+        - name: config-vol
+          mountPath: /config
+        securityContext:
+          runAsUser: 0
+      
+      containers:
+      - name: jellyfin
+        image: lscr.io/linuxserver/jellyfin:latest
+        envFrom:
+        - configMapRef:
+            name: common-env
+        ports:
+        - containerPort: 8096
+          name: http-web
+        
+        volumeMounts:
+        - mountPath: /config
+          name: config-vol
+        - mountPath: /data/media
+          name: media-storage
+      volumes:
+      - name: config-vol
+        persistentVolumeClaim:
+          claimName: jellyfin-config
+      - name: media-storage
+        persistentVolumeClaim:
+          claimName: data

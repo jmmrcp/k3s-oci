@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: torbox-config
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: torbox-connector
+    # app.kubernetes.io/instance: torbox     # opcional, útil con Helm o múltiples instancias
+    # app.kubernetes.io/part-of: media-stack # opcional, para agrupar componentes relacionados
+
+data:
+  # Método de montaje: "strm" (recomendado para Jellyfin/Emby/Plex) o "fuse" (montaje virtual directo)
+  MOUNT_METHOD: "strm"
+
+  # Ruta base donde se generarán los archivos .strm o el punto de montaje FUSE
+  MOUNT_PATH: "/data/torbox"
+
+  # Intervalo de actualización del catálogo (en minutos o según documentación del contenedor)
+  UPDATE_INTERVAL: "10"               # ← descomentar y ajustar si se necesita
+
+  # Tiempo de refresco del montaje (valores típicos: ultra_fast, fast, normal, slow)
+  MOUNT_REFRESH_TIME: "instant"
+
+  # Activar generación de archivos de metadatos NFO junto a los .strm
+  ENABLE_METADATA: "false"
+
+  # Modo raw: desactiva procesamientos adicionales (útil para depuración o compatibilidad)
+  RAW_MODE: "true"
+
+  # Forzar salida sin buffer en Python (mejora visibilidad de logs en contenedores)
+  PYTHONUNBUFFERED: "1"

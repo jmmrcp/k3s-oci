@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filebrowser
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: filebrowser
+    app.kubernetes.io/component: file-manager
+    # app.kubernetes.io/instance: filebrowser-prod  # opcional si usas múltiples instancias
+
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5               # valor conservador recomendado
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filebrowser
+
+  strategy:
+    type: Recreate                       # adecuado para apps con estado (base de datos local)
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: filebrowser
+
+    spec:
+      # Afinidad al nodo específico (útil en clusters con storage local o single-node)
+      nodeSelector:
+        kubernetes.io/hostname: instance-20260107-0859
+
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch  # mejora compatibilidad con volúmenes existentes
+
+      containers:
+        - name: filebrowser
+          image: filebrowser/filebrowser:latest
+          imagePullPolicy: IfNotPresent      # recomendado para imágenes estables; considera :v2.55.x si prefieres pinning
+
+          # Directorio de trabajo recomendado por el proyecto
+          workingDir: /config
+
+          args:
+            - --root=/data                   # directorio raíz visible en la UI
+            - --database=/config/filebrowser.db
+            - --config=/config/settings.json
+            - --port=80
+            - --address=0.0.0.0
+            - --log=stdout                   # logs a stdout para mejor integración con kubectl logs (mejor que archivo)
+
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          resources:                         # altamente recomendado definir siempre
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          volumeMounts:
+            - name: config-vol
+              mountPath: /config
+              # readOnly: false              # explícito si necesitas
+
+            - name: data-storage
+              mountPath: /data
+              # subPath: torbox              # opcional: si quieres aislar subdirectorio dentro del PVC compartido
+
+            # Descomentar si deseas montar el punto de TorBox como read-only
+            # - name: torbox-mount
+            #   mountPath: /data/remote
+            #   readOnly: true
+            #   mountPropagation: HostToContainer  # si usas hostPath en nodo específico
+
+          # Probes recomendadas para mejorar fiabilidad
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+      volumes:
+        - name: config-vol
+          persistentVolumeClaim:
+            claimName: filebrowser-config   # PVC dedicado para DB y settings (recomendado 1-2Gi)
+
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: data                 # PVC compartido con TorBox
+
+        # Descomentar si usas hostPath para montaje TorBox
+        # - name: torbox-mount
+        #   hostPath:
+        #     path: /mnt/torbox-mount       # ajusta según tu nodo
+        #     type: DirectoryOrCreate

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: torbox-config
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: torbox-connector
+    # app.kubernetes.io/instance: torbox     # opcional, recomendado si usas Helm o múltiples instancias
+    # app.kubernetes.io/component: config     # opcional, para mejor organización
+
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: local-path
+  volumeMode: Filesystem
+
+  # Opcional pero recomendado en entornos con un solo nodo o cuando la afinidad no es crítica:
+  # selector:
+  #   matchLabels:
+  #     app.kubernetes.io/name: torbox-connector   # si deseas restringir más

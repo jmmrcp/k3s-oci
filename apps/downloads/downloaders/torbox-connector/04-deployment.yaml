@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: torbox-connector
+  namespace: downloads
+  labels:
+    app.kubernetes.io/name: torbox-connector
+    # app.kubernetes.io/instance:  # ← añadir si usas Helm o múltiples instancias
+    # app.kubernetes.io/version:   # ← recomendado
+    # app.kubernetes.io/part-of: media-center
+
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5               # ← valor más conservador y habitual
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: torbox-connector
+
+  strategy:
+    type: Recreate                       # sigue siendo adecuado para stateful-like
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: torbox-connector
+
+    spec:
+      # --------------------------------------------------
+      # Orden recomendado: securityContext → serviceAccount → containers → volumes
+      # --------------------------------------------------
+
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch   # ← mejora en volúmenes grandes
+        runAsNonRoot: true
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+      nodeSelector:
+        kubernetes.io/hostname: instance-20260107-0859
+
+      containers:
+        - name: torbox
+          image: anonymoussystems/torbox-media-center:latest
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - python
+            - /app/main.py
+
+          workingDir: /config
+
+          env:
+            - name: TORBOX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: torbox-secrets
+                  key: api-key
+
+            - name: PYTHONUNBUFFERED
+              value: "1"                      # ← casi siempre conviene ponerlo fijo
+
+            # Variables desde ConfigMap (agrupadas)
+            - name: MOUNT_METHOD
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: MOUNT_METHOD
+
+            - name: MOUNT_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: MOUNT_PATH
+
+            - name: UPDATE_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: UPDATE_INTERVAL
+
+            - name: MOUNT_REFRESH_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: MOUNT_REFRESH_TIME
+
+            - name: ENABLE_METADATA
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: ENABLE_METADATA
+
+            - name: RAW_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: torbox-config
+                  key: RAW_MODE
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 1000m          # ← "1" → "1000m" (mejor legibilidad)
+              memory: 512Mi
+
+          volumeMounts:
+            - name: media-storage
+              mountPath: /data
+              # subPath: torbox     # ← opcional, pero recomendado si compartes PVC
+
+            - name: config-vol
+              mountPath: /config
+              readOnly: false     # explícito
+
+            - name: tmp
+              mountPath: /tmp
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pidof python >/dev/null 2>&1
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 3           # ← valor más realista
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test -w /data/torbox
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+      volumes:
+        - name: media-storage
+          persistentVolumeClaim:
+            claimName: data
+
+        - name: config-vol
+          persistentVolumeClaim:
+            claimName: torbox-config
+
+        - name: tmp
+          emptyDir:
+            medium: ""                  # Memory si quieres más velocidad (opcional)
+            # sizeLimit: 256Mi          # ← muy recomendado poner límite

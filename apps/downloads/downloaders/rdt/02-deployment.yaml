@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rdt-client
+  namespace: downloads
+  labels:
+    app: rdt-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rdt-client
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rdt-client
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 0
+      
+      containers:
+      - name: rdt-client
+        image: rogerfar/rdtclient:latest
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: common-env
+        
+        ports:
+        - containerPort: 6500
+          name: http
+            
+        volumeMounts:
+        # 1. Donde se guardarán los enlaces .strm / symlinks (Tu disco de 100GB)
+        - mountPath: /data
+          name: media
+        
+        # 2. Configuración
+        - mountPath: /config
+          name: config
+          
+        # 3. ¡NUEVO! Conexión con Zurg/Real-Debrid
+        # Esto lee la carpeta montada por el otro deployment (Zurg)
+        #- mountPath: /data/remote
+        #  name: zurg-mount
+        #  readOnly: true
+        #  mountPropagation: HostToContainer 
+
+      volumes:
+      - name: config
+        persistentVolumeClaim:
+          claimName: rdt-client-config
+      - name: media
+        persistentVolumeClaim:
+          claimName: data
+      
+      # 4. Definición del volumen de Zurg (hostPath)
+      # IMPORTANTE: Esta ruta (/mnt/zurg-mount) debe ser LA MISMA
+      # que pusiste en el deployment de Zurg que creamos antes.
+      #- name: zurg-mount
+      #  hostPath:
+      #    path: /mnt/torbox-mount
+      #    type: Directory

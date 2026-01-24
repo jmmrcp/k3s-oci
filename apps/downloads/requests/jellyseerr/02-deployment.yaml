@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyseerr
+  namespace: downloads
+  labels:
+    app: jellyseerr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyseerr
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: jellyseerr
+    spec:
+      initContainers:
+      - name: fix-permissions
+        image: busybox:latest
+        # CAMBIADO A 1000
+        command: ["sh", "-c", "chown -R 1000:1000 /app/config"]
+        volumeMounts:
+        - name: config-vol
+          mountPath: /app/config
+        securityContext:
+          runAsUser: 0
+      containers:
+      - name: jellyseerr
+        image: fallenbagel/jellyseerr:latest
+        env:
+        - name: TZ
+          value: Europe/Madrid
+        envFrom:
+        - configMapRef:
+            name: common-env
+        ports:
+        - containerPort: 5055
+          name: http-web
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - mountPath: /app/config
+          name: config-vol
+      volumes:
+      - name: config-vol
+        persistentVolumeClaim:
+          claimName: jellyseerr-config
